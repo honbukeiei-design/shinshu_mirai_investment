@@ -13,31 +13,40 @@ BASE = Path(__file__).resolve().parent
 CONFIG = json.loads((BASE / "scenario.json").read_text(encoding="utf-8"))
 
 
-from embedded_assets import ASSETS
+import base64
 
 
-def embedded_uri(kind: str, filename: str) -> str:
-    key = f"static/{kind}/{filename}"
-    try:
-        return ASSETS[key]
-    except KeyError as exc:
-        raise RuntimeError(f"Embedded asset is missing: {key}") from exc
+def data_uri(path: Path, mime: str) -> str:
+    if not path.is_file():
+        raise FileNotFoundError(f"Required asset not found: {path}")
+    return f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode("ascii")
+
+
+def asset_uri(kind: str, filename: str) -> str:
+    path = BASE / "static" / kind / filename
+    if kind == "audio":
+        mime = "audio/mpeg"
+    elif filename.lower().endswith(".png"):
+        mime = "image/png"
+    else:
+        mime = "image/jpeg"
+    return data_uri(path, mime)
 
 
 characters = {}
 for cid, meta in CONFIG["characters"].items():
     characters[cid] = {
         **meta,
-        "src": embedded_uri("characters", meta["file"]),
+        "src": asset_uri("characters", meta["file"]),
     }
 
 backgrounds = {}
 for key, filename in CONFIG["backgrounds"].items():
-    backgrounds[key] = embedded_uri("backgrounds", filename)
+    backgrounds[key] = asset_uri("backgrounds", filename)
 
 music = {}
 for key, filename in CONFIG["music"].items():
-    music[key] = embedded_uri("audio", filename)
+    music[key] = asset_uri("audio", filename)
 
 payload = {
     "title": CONFIG["title"],
@@ -184,7 +193,6 @@ button {{ font: inherit; }}
   color: white;
   font-weight: 900;
 }}
-.role {{ font-size: .75rem; opacity: .86; }}
 .speech {{
   font-size: clamp(1rem, 1.18vw, 1.23rem);
   line-height: 1.6;
@@ -252,6 +260,113 @@ button {{ font: inherit; }}
   font-weight: 800;
   user-select: none;
 }}
+
+.utility-bar {{
+  position: absolute;
+  top: 16px;
+  left: 18px;
+  z-index: 80;
+  display: flex;
+  gap: 8px;
+}}
+.utility-btn {{
+  min-height: 38px;
+  padding: 7px 12px;
+  border: 1px solid rgba(255,255,255,.28);
+  border-radius: 10px;
+  background: rgba(15,48,68,.88);
+  color: white;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 7px 18px rgba(0,0,0,.16);
+}}
+.utility-btn:hover {{ background: rgba(22,70,92,.95); }}
+.modal-backdrop {{
+  position: absolute;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2,12,20,.68);
+  backdrop-filter: blur(4px);
+}}
+.modal {{
+  width: min(860px, 90vw);
+  max-height: 82vh;
+  overflow: hidden;
+  border-radius: 22px;
+  background: #f8fbfd;
+  color: #15394d;
+  box-shadow: 0 28px 90px rgba(0,0,0,.38);
+  border: 1px solid rgba(255,255,255,.7);
+}}
+.modal-head {{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #dbe7ed;
+  background: #edf5f8;
+}}
+.modal-head h3 {{ margin: 0; font-size: 1.08rem; }}
+.close-btn {{
+  border: 0;
+  border-radius: 9px;
+  padding: 7px 11px;
+  background: #dce9ef;
+  color: #15394d;
+  font-weight: 900;
+  cursor: pointer;
+}}
+.modal-body {{ padding: 16px 18px 18px; max-height: calc(82vh - 62px); overflow: auto; }}
+.scene-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }}
+.scene-btn {{
+  width: 100%;
+  min-height: 54px;
+  border: 1px solid #bed2dc;
+  border-radius: 13px;
+  padding: 10px 12px;
+  background: white;
+  color: #15394d;
+  font-weight: 900;
+  text-align: left;
+  cursor: pointer;
+}}
+.scene-btn:hover {{ background: #eaf4f7; }}
+.edit-meta {{ margin: 0 0 10px; font-weight: 900; color: #238794; }}
+.editor-text {{
+  width: 100%;
+  min-height: 220px;
+  resize: vertical;
+  border: 1px solid #adc7d3;
+  border-radius: 14px;
+  padding: 14px;
+  color: #15394d;
+  background: white;
+  font: 700 1rem/1.65 "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif;
+}}
+.editor-actions {{ display: flex; justify-content: flex-end; gap: 9px; margin-top: 12px; }}
+.save-btn {{
+  border: 0;
+  border-radius: 11px;
+  padding: 10px 18px;
+  background: #238794;
+  color: white;
+  font-weight: 900;
+  cursor: pointer;
+}}
+.secondary-btn {{
+  border: 1px solid #b8cdd7;
+  border-radius: 11px;
+  padding: 10px 16px;
+  background: white;
+  color: #15394d;
+  font-weight: 900;
+  cursor: pointer;
+}}
+@media (max-width: 680px) {{ .scene-grid {{ grid-template-columns: 1fr; }} }}
 @media (max-height: 820px) {{
   .stage {{ inset: 7px 10px 72px; }}
   .cast {{ top: 10px; bottom: 130px; }}
@@ -335,6 +450,84 @@ function controls(label) {{
   return `<div class="controls"><button class="next-btn" id="next">${{esc(label)}}</button></div>`;
 }}
 
+
+function utilityBar(canEdit = false) {{
+  return `<div class="utility-bar">
+    <button class="utility-btn" id="sceneMenu">場面</button>
+    ${{canEdit ? '<button class="utility-btn" id="editScenario">編集</button>' : ''}}
+  </div>`;
+}}
+
+function bindUtilities() {{
+  const sceneBtn = document.getElementById('sceneMenu');
+  if (sceneBtn) sceneBtn.addEventListener('click', openSceneMenu);
+  const editBtn = document.getElementById('editScenario');
+  if (editBtn) editBtn.addEventListener('click', openEditor);
+}}
+
+function slideIndexForSection(sectionIndex) {{
+  return slides.findIndex(s => s.sectionIndex === sectionIndex);
+}}
+
+function sectionLabel(section, index) {{
+  if (section.transition) return section.transition;
+  if (section.id === 'intro') return '導入';
+  if (section.id === 'ending') return 'まとめ';
+  return `場面 ${{index + 1}}`;
+}}
+
+function openSceneMenu() {{
+  const items = DATA.sections.map((section, index) =>
+    `<button class="scene-btn" data-section="${{index}}">${{esc(sectionLabel(section, index))}}</button>`
+  ).join('');
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-backdrop';
+  overlay.innerHTML = `<div class="modal">
+    <div class="modal-head"><h3>場面を選ぶ</h3><button class="close-btn" id="closeModal">閉じる</button></div>
+    <div class="modal-body"><div class="scene-grid">${{items}}</div></div>
+  </div>`;
+  app.appendChild(overlay);
+  overlay.querySelector('#closeModal').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => {{ if (e.target === overlay) overlay.remove(); }});
+  overlay.querySelectorAll('.scene-btn').forEach(btn => btn.addEventListener('click', () => {{
+    const sectionIndex = Number(btn.dataset.section);
+    const idx = slideIndexForSection(sectionIndex);
+    if (idx >= 0) {{ cursor = idx; started = true; renderCurrent(); }}
+  }}));
+}}
+
+function openEditor() {{
+  if (cursor < 0 || !slides[cursor] || slides[cursor].kind !== 'dialogue') return;
+  const slide = slides[cursor];
+  const section = DATA.sections[slide.sectionIndex];
+  const segment = section.segments[slide.segmentIndex];
+  const speaker = DATA.characters[segment.speaker];
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-backdrop';
+  overlay.innerHTML = `<div class="modal">
+    <div class="modal-head"><h3>シナリオ編集</h3><button class="close-btn" id="closeModal">閉じる</button></div>
+    <div class="modal-body">
+      <p class="edit-meta">${{esc(speaker.name)}}</p>
+      <textarea class="editor-text" id="scenarioText">${{esc(segment.text)}}</textarea>
+      <div class="editor-actions">
+        <button class="secondary-btn" id="cancelEdit">キャンセル</button>
+        <button class="save-btn" id="saveEdit">反映</button>
+      </div>
+    </div>
+  </div>`;
+  app.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#closeModal').addEventListener('click', close);
+  overlay.querySelector('#cancelEdit').addEventListener('click', close);
+  overlay.addEventListener('click', e => {{ if (e.target === overlay) close(); }});
+  overlay.querySelector('#saveEdit').addEventListener('click', () => {{
+    segment.text = overlay.querySelector('#scenarioText').value.trim();
+    close();
+    renderCurrent();
+  }});
+  setTimeout(() => {{ const t = overlay.querySelector('#scenarioText'); t.focus(); t.setSelectionRange(t.value.length, t.value.length); }}, 0);
+}}
+
 function bindNext(fn) {{
   const btn = document.getElementById('next');
   if (btn) btn.addEventListener('click', fn, {{ once: true }});
@@ -353,7 +546,9 @@ function renderTitle() {{
         <p>${{esc(DATA.title.lead)}}</p>
       </div>
     </div>
+    ${{utilityBar()}}
     ${{controls('はじめる')}}`;
+  bindUtilities();
   bindNext(() => {{
     started = true;
     audio.play().catch(() => {{}});
@@ -368,7 +563,9 @@ function renderTransition(section) {{
     <div class="stage transition-stage">
       <div class="transition-card"><h2>${{esc(section.transition)}}</h2></div>
     </div>
+    ${{utilityBar()}}
     ${{controls('場面を見る')}}`;
+  bindUtilities();
   bindNext(nextSlide);
 }}
 
@@ -380,12 +577,14 @@ function renderDialogue(section, segment) {{
       ${{castHtml(section, segment.speaker)}}
       <div class="dialogue-wrap">
         <div class="dialogue-card">
-          <div class="nameplate">${{esc(c.name)}} <span class="role">${{esc(c.role)}}</span></div>
+          <div class="nameplate">${{esc(c.name)}}</div>
           <div class="speech">${{esc(segment.text)}}</div>
         </div>
       </div>
     </div>
+    ${{utilityBar(true)}}
     ${{controls('次へ')}}`;
+  bindUtilities();
   bindNext(nextSlide);
 }}
 
@@ -398,7 +597,9 @@ function renderEnd() {{
         <p>5つの投資案から、信州みらい病院にとって優先すべき投資を考えてみましょう。</p>
       </div>
     </div>
+    ${{utilityBar()}}
     ${{controls('タイトルへ戻る')}}`;
+  bindUtilities();
   bindNext(() => {{
     cursor = -1;
     currentTrack = null;
