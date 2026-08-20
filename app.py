@@ -14,6 +14,13 @@ CONFIG = json.loads((BASE / "scenario.json").read_text(encoding="utf-8"))
 SAVED_EDITS_PATH = BASE / "saved_edits.json"
 SAVED_EDITS = json.loads(SAVED_EDITS_PATH.read_text(encoding="utf-8")) if SAVED_EDITS_PATH.is_file() else None
 
+try:
+    SUPABASE_URL = str(st.secrets.get("SUPABASE_URL", "")).strip()
+    SUPABASE_ANON_KEY = str(st.secrets.get("SUPABASE_ANON_KEY", "")).strip()
+except Exception:
+    SUPABASE_URL = ""
+    SUPABASE_ANON_KEY = ""
+
 
 import base64
 
@@ -58,6 +65,10 @@ payload = {
     "sections": CONFIG["sections"],
     "additional_sections": CONFIG.get("additional_sections", []),
     "saved_edits": SAVED_EDITS,
+    "submission_store": {
+        "supabase_url": SUPABASE_URL,
+        "supabase_anon_key": SUPABASE_ANON_KEY,
+    },
 }
 
 payload_json = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
@@ -395,6 +406,108 @@ button {{ font: inherit; }}
 @media (max-width: 680px) {{ .settings-grid {{ grid-template-columns: 1fr; }} .field-block.full {{ grid-column: auto; }} }}
 
 @media (max-width: 680px) {{ .scene-grid {{ grid-template-columns: 1fr; }} }}
+
+/* proposal input + BI dashboard */
+.work-screen {{
+  position: absolute;
+  inset: 10px 14px 82px;
+  border-radius: 24px;
+  overflow: hidden;
+  background: linear-gradient(145deg,#f7fbfd,#e8f2f7);
+  color: #17394d;
+  box-shadow: 0 14px 38px rgba(0,0,0,.22);
+  z-index: 5;
+}}
+.work-head {{
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 24px;
+  background: rgba(255,255,255,.94);
+  border-bottom: 1px solid #d6e4eb;
+}}
+.work-title {{ font-size: clamp(1.25rem,2.1vw,2rem); font-weight: 950; letter-spacing: .02em; }}
+.work-badge {{ padding: 8px 14px; border-radius: 999px; background:#237ea8; color:white; font-weight:900; white-space:nowrap; }}
+.form-shell {{ height: calc(100% - 70px); display:grid; grid-template-columns: minmax(430px, 650px) minmax(300px, 1fr); gap:18px; padding:16px 20px; }}
+.entry-card, .summary-card, .bi-card {{
+  background:#fff; border:1px solid #d3e1e8; border-radius:24px; box-shadow:0 12px 28px rgba(28,70,91,.10);
+}}
+.entry-card {{ padding:14px 18px; overflow:hidden; }}
+.form-grid {{ display:grid; grid-template-columns: 1fr 1fr; gap:9px 12px; }}
+.form-field {{ min-width:0; }}
+.form-field.full {{ grid-column:1/-1; }}
+.form-field label {{ display:block; margin:0 0 4px; font-weight:900; font-size:.88rem; color:#27546b; }}
+.form-field input, .form-field select, .form-field textarea {{
+  width:100%; border:1px solid #c7d8e1; border-radius:9px; background:#fbfdfe; color:#18394c;
+  min-height:39px; padding:7px 10px; font:inherit; font-weight:750; outline:none;
+}}
+.form-field textarea {{ min-height:74px; max-height:90px; resize:none; line-height:1.45; }}
+.form-field input:focus, .form-field select:focus, .form-field textarea:focus {{ border-color:#2f83ad; box-shadow:0 0 0 3px rgba(47,131,173,.12); }}
+.alloc-head {{ grid-column:1/-1; display:grid; grid-template-columns: 1fr 150px; gap:10px; font-size:.8rem; font-weight:900; color:#658093; margin-top:2px; }}
+.alloc-row {{ grid-column:1/-1; display:grid; grid-template-columns: 1fr 150px; gap:10px; }}
+.total-strip {{ grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-radius:11px; background:#eef6fa; font-weight:950; }}
+.total-strip.over {{ background:#fff0f0; color:#a92d2d; }}
+.submit-row {{ grid-column:1/-1; display:flex; gap:8px; justify-content:flex-end; align-items:center; }}
+.form-message {{ flex:1; min-height:1.2em; font-size:.84rem; font-weight:800; color:#246b47; }}
+.form-message.error {{ color:#a72a2a; }}
+.action-btn {{ min-height:43px; border:0; border-radius:11px; padding:9px 18px; background:#317ead; color:#fff; font-weight:950; cursor:pointer; }}
+.action-btn.secondary {{ background:#e8f1f6; color:#214c64; border:1px solid #cbdce5; }}
+.summary-card {{ padding:18px; display:flex; flex-direction:column; min-height:0; }}
+.summary-card h3 {{ margin:0 0 12px; font-size:1.1rem; }}
+.plan-list {{ display:grid; gap:8px; }}
+.plan-line {{ display:grid; grid-template-columns: 1fr auto; gap:10px; align-items:center; padding:10px 12px; border-radius:12px; background:#f3f8fb; }}
+.plan-line strong {{ font-size:.93rem; }}
+.plan-line span {{ font-weight:950; color:#227da7; }}
+.mini-note {{ margin-top:auto; padding-top:12px; color:#607b8b; font-size:.84rem; line-height:1.55; }}
+.dashboard-shell {{ height:calc(100% - 70px); padding:12px 16px 14px; display:grid; grid-template-rows:auto auto 1fr; gap:10px; }}
+.filter-row {{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; background:#fff; padding:9px 12px; border:1px solid #d5e2e9; border-radius:14px; }}
+.filter-row label {{ font-weight:900; font-size:.84rem; color:#536f80; }}
+.filter-row select {{ min-height:35px; border:1px solid #c9dae3; border-radius:8px; padding:5px 8px; min-width:150px; background:#fff; }}
+.kpis {{ display:grid; grid-template-columns:repeat(4,1fr); gap:9px; }}
+.kpi {{ background:#fff; border:1px solid #d7e3e9; border-radius:14px; padding:9px 12px; }}
+.kpi .label {{ font-size:.76rem; font-weight:900; color:#688190; }}
+.kpi .value {{ font-size:1.35rem; font-weight:950; margin-top:2px; }}
+.bi-grid {{ min-height:0; display:grid; grid-template-columns: 1.15fr .85fr; gap:10px; }}
+.bi-card {{ min-height:0; padding:12px 14px; overflow:hidden; }}
+.bi-card h3 {{ margin:0 0 8px; font-size:1rem; }}
+.chart-scroll, .table-scroll {{ height:calc(100% - 30px); overflow:auto; }}
+.bar-group {{ margin:0 0 10px; }}
+.bar-label {{ display:flex; justify-content:space-between; gap:10px; font-size:.78rem; font-weight:900; margin-bottom:4px; }}
+.bar-track {{ height:14px; background:#edf3f6; border-radius:999px; overflow:hidden; margin-bottom:3px; }}
+.bar-fill {{ height:100%; border-radius:999px; min-width:0; }}
+.bar-fill.first {{ background:#61a5c9; }}
+.bar-fill.final {{ background:#245f86; }}
+.legend {{ display:flex; gap:12px; align-items:center; font-size:.76rem; font-weight:850; color:#5f7786; margin-bottom:7px; }}
+.legend i {{ width:12px; height:12px; border-radius:3px; display:inline-block; margin-right:4px; vertical-align:-2px; }}
+.legend .f1 {{ background:#61a5c9; }} .legend .f2 {{ background:#245f86; }}
+.compare-table {{ width:100%; border-collapse:collapse; font-size:.78rem; }}
+.compare-table th,.compare-table td {{ padding:6px 7px; border-bottom:1px solid #e0e9ee; text-align:left; vertical-align:top; }}
+.compare-table th {{ position:sticky; top:0; background:#f7fafc; z-index:1; color:#4d6878; }}
+.diff-plus {{ color:#176b49; font-weight:900; }} .diff-minus {{ color:#9c3434; font-weight:900; }}
+.empty-state {{ height:100%; display:grid; place-items:center; color:#69808e; font-weight:850; text-align:center; padding:20px; }}
+.home-tools {{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }}
+.home-tools .next-btn {{ width:auto; min-width:220px; padding:0 18px; }}
+@media (max-width: 900px) {{
+  .work-screen {{ inset:5px 7px 66px; border-radius:16px; }}
+  .work-head {{ height:58px; padding:8px 12px; }}
+  .form-shell {{ height:calc(100% - 58px); grid-template-columns:1fr; padding:8px; }}
+  .summary-card {{ display:none; }}
+  .entry-card {{ padding:9px 10px; border-radius:16px; overflow:auto; }}
+  .form-grid {{ gap:6px 8px; }}
+  .form-field label {{ font-size:.75rem; margin-bottom:2px; }}
+  .form-field input,.form-field select {{ min-height:34px; padding:5px 7px; font-size:.84rem; }}
+  .form-field textarea {{ min-height:58px; max-height:62px; font-size:.84rem; }}
+  .alloc-row {{ grid-template-columns:1fr 110px; gap:7px; }}
+  .alloc-head {{ grid-template-columns:1fr 110px; }}
+  .dashboard-shell {{ height:calc(100% - 58px); padding:6px; gap:6px; }}
+  .kpis {{ grid-template-columns:repeat(2,1fr); }}
+  .bi-grid {{ grid-template-columns:1fr; grid-template-rows:1fr 1fr; }}
+  .filter-row {{ padding:6px; }}
+  .filter-row select {{ min-width:110px; }}
+}}
+
 @media (max-height: 820px) {{
   .stage {{ inset: 7px 10px 72px; }}
   .cast {{ top: 10px; bottom: 130px; }}
@@ -444,6 +557,10 @@ let started = false;
 let currentTrack = null;
 const STORAGE_KEY = 'shinshu_mirai_investment_editor_v6';
 const COMPLETED_KEY = 'shinshu_mirai_investment_main_completed_v1';
+const ADDITIONAL_COMPLETED_KEY = 'shinshu_mirai_investment_additional_completed_v1';
+const SUBMISSION_KEY = 'shinshu_mirai_investment_submissions_v1';
+const PLAN_LABELS = {{A:'A：MRI更新',B:'B：看護師採用',C:'C：小児科強化',D:'D：病院DX',E:'E：健診事業強化'}};
+const PLAN_AMOUNTS = {{A:[70],B:[10,20,30],C:[30],D:[30,40,50,60],E:[10,20,30]}};
 const DEFAULT_STYLE = {{ speechPx: 19, namePx: 16, transitionPx: 42, titleHeadlinePx: 64, titleSubtitlePx: 32, titleLeadPx: 18 }};
 let styleSettings = {{ ...DEFAULT_STYLE }};
 
@@ -547,6 +664,8 @@ function slideIndexForSection(sectionIndex) {{
 }}
 function mainCompleted() {{ try {{ return localStorage.getItem(COMPLETED_KEY) === '1'; }} catch(e) {{ return false; }} }}
 function markMainCompleted() {{ try {{ localStorage.setItem(COMPLETED_KEY, '1'); }} catch(e) {{}} }}
+function additionalCompleted() {{ try {{ return localStorage.getItem(ADDITIONAL_COMPLETED_KEY) === '1'; }} catch(e) {{ return false; }} }}
+function markAdditionalCompleted() {{ try {{ localStorage.setItem(ADDITIONAL_COMPLETED_KEY, '1'); }} catch(e) {{}} }}
 function startExperience(mode) {{
   currentMode = mode;
   buildSlides();
@@ -631,6 +750,141 @@ function bindNext(fn) {{
   if (btn) btn.addEventListener('click', fn, {{ once: true }});
 }}
 
+
+function safeJsonParse(raw, fallback) {{ try {{ return JSON.parse(raw); }} catch(e) {{ return fallback; }} }}
+function localSubmissions() {{ try {{ return safeJsonParse(localStorage.getItem(SUBMISSION_KEY)||'[]', []); }} catch(e) {{ return []; }} }}
+function saveLocalSubmissions(rows) {{ try {{ localStorage.setItem(SUBMISSION_KEY, JSON.stringify(rows)); }} catch(e) {{}} }}
+function identityKey(team,nickname) {{ return `${{team.trim()}}||${{nickname.trim()}}`.toLowerCase(); }}
+function participantKey(team,nickname) {{ return identityKey(team,nickname); }}
+function amountMap(record) {{
+  const out={{A:0,B:0,C:0,D:0,E:0}};
+  (record.allocations||[]).forEach(x=>{{ if(out[x.plan]!==undefined) out[x.plan]=Number(x.amount)||0; }});
+  return out;
+}}
+function flattenForRemote(record) {{
+  const m=amountMap(record); return {{participant_key:record.participant_key,team_name:record.team_name,nickname:record.nickname,round:record.round,a_amount:m.A,b_amount:m.B,c_amount:m.C,d_amount:m.D,e_amount:m.E,total_amount:record.total_amount,perspective:record.perspective||'',updated_at:new Date().toISOString()}};
+}}
+function remoteEnabled() {{ return !!(DATA.submission_store?.supabase_url && DATA.submission_store?.supabase_anon_key); }}
+async function saveRemote(record) {{
+  if(!remoteEnabled()) return true;
+  const url=DATA.submission_store.supabase_url.replace(/\/$/,'')+'/rest/v1/investment_submissions?on_conflict=participant_key,round';
+  const key=DATA.submission_store.supabase_anon_key;
+  const res=await fetch(url,{{method:'POST',headers:{{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'}},body:JSON.stringify(flattenForRemote(record))}});
+  if(!res.ok) throw new Error(`共有保存に失敗しました (${{res.status}})`); return true;
+}}
+async function loadRemote() {{
+  if(!remoteEnabled()) return null;
+  const url=DATA.submission_store.supabase_url.replace(/\/$/,'')+'/rest/v1/investment_submissions?select=*&order=updated_at.desc';
+  const key=DATA.submission_store.supabase_anon_key;
+  const res=await fetch(url,{{headers:{{'apikey':key,'Authorization':'Bearer '+key}}}}); if(!res.ok) throw new Error(`共有データを取得できません (${{res.status}})`);
+  const rows=await res.json();
+  return rows.map(r=>({{participant_key:r.participant_key,team_name:r.team_name,nickname:r.nickname,round:r.round,allocations:[['A',r.a_amount],['B',r.b_amount],['C',r.c_amount],['D',r.d_amount],['E',r.e_amount]].filter(x=>Number(x[1])>0).map(x=>({{plan:x[0],amount:Number(x[1])}})),total_amount:Number(r.total_amount)||0,perspective:r.perspective||'',updated_at:r.updated_at||''}}));
+}}
+function upsertLocal(record) {{
+  const rows=localSubmissions(); const i=rows.findIndex(r=>r.participant_key===record.participant_key && r.round===record.round);
+  if(i>=0) rows[i]=record; else rows.push(record); saveLocalSubmissions(rows);
+}}
+function latestIdentityRecord(round) {{
+  const rows=localSubmissions().filter(r=>r.round===round); return rows.length?rows[rows.length-1]:null;
+}}
+function existingForIdentity(team,nickname,round) {{ const k=identityKey(team,nickname); return localSubmissions().find(r=>identityKey(r.team_name,r.nickname)===k && r.round===round); }}
+function stopMusicForWork(){{ audio.pause(); currentTrack=null; }}
+function homeButton(label,id,secondary=false){{ return `<button class="next-btn ${{secondary?'secondary-home':''}}" id="${{id}}">${{esc(label)}}</button>`; }}
+
+function renderProposal(round) {{
+  stopMusicForWork();
+  const isFinal=round==='final';
+  if(!mainCompleted()) {{ renderTitle(); return; }}
+  if(isFinal && !additionalCompleted()) {{ renderTitle(); return; }}
+  const seed = latestIdentityRecord(isFinal?'first':'first');
+  const finalExisting = isFinal && seed ? existingForIdentity(seed.team_name,seed.nickname,'final') : null;
+  const current = finalExisting || (isFinal ? seed : latestIdentityRecord('first')) || {{team_name:'',nickname:'',allocations:[],perspective:''}};
+  const allocMap=Object.fromEntries((current.allocations||[]).map(x=>[x.plan,x.amount]));
+  const selectedPlans=(current.allocations||[]).map(x=>x.plan);
+  const rows=[0,1,2,3].map(i=>{{ const plan=selectedPlans[i]||''; const amount=plan?(allocMap[plan]||PLAN_AMOUNTS[plan][0]):''; return `<div class="alloc-row"><select class="plan-select" data-row="${{i}}"><option value="">選択してください</option>${{Object.entries(PLAN_LABELS).map(([k,v])=>`<option value="${{k}}" ${{k===plan?'selected':''}}>${{v}}</option>`).join('')}}</select><select class="amount-select" data-row="${{i}}"></select></div>`; }}).join('');
+  app.innerHTML=`<div class="work-screen"><div class="work-head"><div class="work-title">${{isFinal?'最終案の入力':'第1回案の入力'}}</div><div class="work-badge">重点投資予算 100万円</div></div><div class="form-shell"><div class="entry-card"><div class="form-grid">
+    <div class="form-field"><label>チーム名</label><input id="teamName" value="${{esc(current.team_name||'')}}" autocomplete="organization"></div>
+    <div class="form-field"><label>呼び名</label><input id="nickname" value="${{esc(current.nickname||'')}}" autocomplete="nickname"></div>
+    <div class="alloc-head"><span>投資案</span><span>金額</span></div>${{rows}}
+    <div class="total-strip" id="totalStrip"><span>合計</span><span id="totalAmount">0万円</span></div>
+    <div class="form-field full"><label>最も重視した視点</label><textarea id="perspective" placeholder="重視したことを入力してください">${{esc(current.perspective||'')}}</textarea></div>
+    <div class="submit-row"><div class="form-message" id="formMessage"></div><button class="action-btn secondary" id="backHome">戻る</button><button class="action-btn" id="saveProposal">${{isFinal?'最終案を送信':'第1回案を提出'}}</button></div>
+  </div></div><div class="summary-card"><h3>配分案</h3><div class="plan-list" id="proposalSummary"></div><div class="mini-note">投資案は最大4つまで選択できます。合計が100万円を超える組み合わせは選択できません。</div></div></div></div>`;
+  const planEls=[...document.querySelectorAll('.plan-select')], amountEls=[...document.querySelectorAll('.amount-select')];
+  function selections(){{ return planEls.map((p,i)=>({{plan:p.value,amount:Number(amountEls[i].value)||0}})).filter(x=>x.plan); }}
+  function totalExcluding(row){{ return selections().reduce((sum,x,i)=>sum+x.amount,0) - (Number(amountEls[row]?.value)||0); }}
+  function rebuildAmounts(row, keepValue=true){{
+    const p=planEls[row].value, el=amountEls[row], old=keepValue?Number(el.value)||0:0; el.innerHTML='';
+    if(!p){{ el.innerHTML='<option value="">—</option>'; el.disabled=true; return; }}
+    el.disabled=false; const base=selections().reduce((s,x,idx)=> idx===row?s:s+x.amount,0); const opts=PLAN_AMOUNTS[p];
+    opts.forEach(a=>{{ const disabled=base+a>100; const op=document.createElement('option'); op.value=a; op.textContent=`${{a}} 万円`; op.disabled=disabled; if((old===a || (!old && !disabled && !el.value))) op.selected=true; el.appendChild(op); }});
+    if(![...el.options].some(o=>o.selected&&!o.disabled)){{ const first=[...el.options].find(o=>!o.disabled); if(first) first.selected=true; else {{ el.innerHTML='<option value="">上限超過</option>'; el.disabled=true; }} }}
+  }}
+  function refresh(){{
+    const used=planEls.map(x=>x.value).filter(Boolean);
+    planEls.forEach((sel,row)=>{{
+      const otherTotal=planEls.reduce((sum,p,idx)=>idx===row?sum:sum+(Number(amountEls[idx]?.value)||0),0);
+      [...sel.options].forEach(op=>{{
+        if(!op.value)return;
+        const duplicate=used.includes(op.value)&&op.value!==sel.value;
+        const minAmount=Math.min(...PLAN_AMOUNTS[op.value]);
+        const budgetBlocked=otherTotal+minAmount>100 && op.value!==sel.value;
+        op.disabled=duplicate||budgetBlocked;
+      }});
+    }});
+    amountEls.forEach((_,i)=>rebuildAmounts(i,true));
+    const items=selections(), total=items.reduce((s,x)=>s+x.amount,0); document.getElementById('totalAmount').textContent=`${{total}}万円`; document.getElementById('totalStrip').classList.toggle('over',total>100);
+    document.getElementById('proposalSummary').innerHTML=items.length?items.map(x=>`<div class="plan-line"><strong>${{esc(PLAN_LABELS[x.plan])}}</strong><span>${{x.amount}}万円</span></div>`).join(''):'<div class="empty-state">投資案を選択してください</div>';
+  }}
+  planEls.forEach((sel,i)=>sel.addEventListener('change',()=>{{
+    rebuildAmounts(i,false);
+    if(sel.value && amountEls[i].disabled){{ sel.value=''; rebuildAmounts(i,false); }}
+    refresh();
+  }})); amountEls.forEach(el=>el.addEventListener('change',refresh));
+  for(let i=0;i<4;i++) rebuildAmounts(i,true); refresh();
+  document.getElementById('backHome').addEventListener('click',renderTitle);
+  document.getElementById('saveProposal').addEventListener('click',async()=>{{
+    const team=document.getElementById('teamName').value.trim(), nick=document.getElementById('nickname').value.trim(), perspective=document.getElementById('perspective').value.trim(), allocations=selections(), total=allocations.reduce((s,x)=>s+x.amount,0), msg=document.getElementById('formMessage');
+    msg.className='form-message'; msg.textContent='';
+    if(!team||!nick){{ msg.classList.add('error'); msg.textContent='チーム名と呼び名を入力してください。'; return; }}
+    if(!allocations.length){{ msg.classList.add('error'); msg.textContent='投資案を1つ以上選択してください。'; return; }}
+    if(total>100){{ msg.classList.add('error'); msg.textContent='合計は100万円以内にしてください。'; return; }}
+    const firstMatch=isFinal?existingForIdentity(team,nick,'first'):null;
+    if(isFinal&&!firstMatch){{ msg.classList.add('error'); msg.textContent='同じチーム名・呼び名の第1回案が見つかりません。'; return; }}
+    const pk=firstMatch?.participant_key || participantKey(team,nick);
+    const record={{participant_key:pk,team_name:team,nickname:nick,round,allocations,total_amount:total,perspective,updated_at:new Date().toISOString()}};
+    upsertLocal(record); msg.textContent=remoteEnabled()?'保存しています…':'保存しました。';
+    try{{ await saveRemote(record); msg.textContent=remoteEnabled()?'保存・共有しました。':'保存しました。'; setTimeout(()=>renderDashboard(),450); }}catch(e){{ msg.classList.add('error'); msg.textContent=`ブラウザには保存しました。${{e.message}}`; }}
+  }});
+}}
+
+function uniqueVals(rows,key){{ return [...new Set(rows.map(r=>r[key]).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ja')); }}
+function aggregatePair(rows){{
+  const result={{}}; for(const p of Object.keys(PLAN_LABELS)) result[p]={{first:[],final:[]}};
+  rows.forEach(r=>{{ const m=amountMap(r); Object.keys(result).forEach(p=>result[p][r.round]?.push(m[p]||0)); }});
+  const avg=a=>a.length?Math.round(a.reduce((s,x)=>s+x,0)/a.length):0; Object.keys(result).forEach(p=>{{result[p].first=avg(result[p].first);result[p].final=avg(result[p].final);}}); return result;
+}}
+function renderBars(agg){{ return `<div class="legend"><span><i class="f1"></i>第1回</span><span><i class="f2"></i>最終</span></div>${{Object.entries(PLAN_LABELS).map(([p,label])=>{{const a=agg[p];return `<div class="bar-group"><div class="bar-label"><span>${{esc(label)}}</span><span>${{a.first}} → ${{a.final}}万円</span></div><div class="bar-track"><div class="bar-fill first" style="width:${{Math.min(100,a.first)}}%"></div></div><div class="bar-track"><div class="bar-fill final" style="width:${{Math.min(100,a.final)}}%"></div></div></div>`;}}).join('')}}`; }}
+function comparisonRows(rows){{
+  const groups={{}}; rows.forEach(r=>{{const k=identityKey(r.team_name,r.nickname);groups[k]??={{team:r.team_name,nick:r.nickname,first:null,final:null}};groups[k][r.round]=r;}});
+  return Object.values(groups).sort((a,b)=>(a.team+a.nick).localeCompare(b.team+b.nick,'ja'));
+}}
+async function renderDashboard(){{
+  stopMusicForWork(); if(!mainCompleted()){{renderTitle();return;}}
+  app.innerHTML=`<div class="work-screen"><div class="work-head"><div class="work-title">結果比較</div><div class="work-badge" id="dataMode">読み込み中</div></div><div class="dashboard-shell"><div class="filter-row"><label>チーム名</label><select id="teamFilter"><option value="">すべて</option></select><label>呼び名</label><select id="nickFilter"><option value="">すべて</option></select><button class="action-btn secondary" id="reloadData">更新</button><button class="action-btn secondary" id="dashHome">戻る</button></div><div class="kpis"><div class="kpi"><div class="label">回答者</div><div class="value" id="kpiPeople">0</div></div><div class="kpi"><div class="label">チーム</div><div class="value" id="kpiTeams">0</div></div><div class="kpi"><div class="label">第1回案</div><div class="value" id="kpiFirst">0</div></div><div class="kpi"><div class="label">最終案</div><div class="value" id="kpiFinal">0</div></div></div><div class="bi-grid"><div class="bi-card"><h3>投資配分の比較</h3><div class="chart-scroll" id="chartArea"><div class="empty-state">データを読み込んでいます</div></div></div><div class="bi-card"><h3>回答者別比較</h3><div class="table-scroll" id="tableArea"></div></div></div></div></div>`;
+  document.getElementById('dashHome').addEventListener('click',renderTitle); document.getElementById('reloadData').addEventListener('click',()=>renderDashboard());
+  let all=[]; try{{ const remote=await loadRemote(); all=remote??localSubmissions(); document.getElementById('dataMode').textContent=remote?'共有データ':'このブラウザ'; }}catch(e){{ all=localSubmissions(); document.getElementById('dataMode').textContent='このブラウザ'; }}
+  const tf=document.getElementById('teamFilter'), nf=document.getElementById('nickFilter'); uniqueVals(all,'team_name').forEach(v=>tf.insertAdjacentHTML('beforeend',`<option>${{esc(v)}}</option>`)); uniqueVals(all,'nickname').forEach(v=>nf.insertAdjacentHTML('beforeend',`<option>${{esc(v)}}</option>`));
+  function draw(){{
+    const team=tf.value,nick=nf.value,rows=all.filter(r=>(!team||r.team_name===team)&&(!nick||r.nickname===nick)); const comps=comparisonRows(rows); document.getElementById('kpiPeople').textContent=comps.length;document.getElementById('kpiTeams').textContent=uniqueVals(rows,'team_name').length;document.getElementById('kpiFirst').textContent=rows.filter(r=>r.round==='first').length;document.getElementById('kpiFinal').textContent=rows.filter(r=>r.round==='final').length;
+    document.getElementById('chartArea').innerHTML=rows.length?renderBars(aggregatePair(rows)):'<div class="empty-state">該当する回答はありません</div>';
+    if(!comps.length){{document.getElementById('tableArea').innerHTML='<div class="empty-state">該当する回答はありません</div>';return;}}
+    const tr=comps.map(g=>{{const fm=g.first?amountMap(g.first):{{}}, lm=g.final?amountMap(g.final):{{}}; const diffs=Object.keys(PLAN_LABELS).map(p=>{{const d=(lm[p]||0)-(fm[p]||0);return `${{p}}:${{d>0?'+':''}}${{d}}`}}).join(' / ');return `<tr><td>${{esc(g.team)}}</td><td>${{esc(g.nick)}}</td><td>${{g.first?g.first.total_amount+'万円':'—'}}</td><td>${{g.final?g.final.total_amount+'万円':'—'}}</td><td>${{esc(diffs)}}</td><td>${{esc(g.first?.perspective||'')}}</td><td>${{esc(g.final?.perspective||'')}}</td></tr>`;}}).join('');
+    document.getElementById('tableArea').innerHTML=`<table class="compare-table"><thead><tr><th>チーム</th><th>呼び名</th><th>第1回</th><th>最終</th><th>A～Eの変化</th><th>第1回の視点</th><th>最終の視点</th></tr></thead><tbody>${{tr}}</tbody></table>`;
+  }}
+  tf.addEventListener('change',()=>{{ nf.innerHTML='<option value="">すべて</option>'+uniqueVals(all.filter(r=>!tf.value||r.team_name===tf.value),'nickname').map(v=>`<option>${{esc(v)}}</option>`).join(''); draw(); }}); nf.addEventListener('change',draw); draw();
+}}
+
 function renderTitle() {{
   currentMode = 'main';
   buildSlides();
@@ -638,8 +892,14 @@ function renderTitle() {{
   const first = DATA.sections[0];
   setMusic(first.music);
   const explainer = DATA.characters.explainer;
-  const extraButton = mainCompleted() && (DATA.additional_sections || []).length
-    ? `<button class="next-btn secondary-home" id="startAdditional">地域の高齢化と職員負担</button>` : '';
+  const doneMain=mainCompleted(), doneAdditional=additionalCompleted();
+  let toolButtons='';
+  if(doneMain){{
+    toolButtons += homeButton(latestIdentityRecord('first')?'第1回案を確認・修正':'第1回案を入力','openFirst');
+    toolButtons += homeButton('地域の高齢化と職員負担','startAdditional',true);
+    toolButtons += homeButton('結果比較','openDashboard',true);
+  }}
+  if(doneAdditional) toolButtons += homeButton(latestIdentityRecord('final')?'最終案を確認・修正':'最終案を入力','openFinal');
   app.innerHTML = `
     <div class="stage" style="${{backgroundStyle('entrance')}}">
       <div class="cast count-1"><div class="char-wrap active"><img src="${{explainer.src}}" alt=""></div></div>
@@ -650,13 +910,14 @@ function renderTitle() {{
       </div>
     </div>
     ${{utilityBar()}}
-    <div class="controls home-controls"><div class="home-buttons"><button class="next-btn" id="startMain">はじめる</button>${{extraButton}}</div></div>`;
+    <div class="controls home-controls"><div class="home-tools">${{homeButton(doneMain?'もう一度見る':'はじめる','startMain')}}${{toolButtons}}</div></div>`;
   bindUtilities();
   document.getElementById('startMain').addEventListener('click', () => startExperience('main'));
-  const extra = document.getElementById('startAdditional');
-  if (extra) extra.addEventListener('click', () => startExperience('additional'));
+  const a=document.getElementById('startAdditional'); if(a)a.addEventListener('click',()=>startExperience('additional'));
+  const f=document.getElementById('openFirst'); if(f)f.addEventListener('click',()=>renderProposal('first'));
+  const fin=document.getElementById('openFinal'); if(fin)fin.addEventListener('click',()=>renderProposal('final'));
+  const d=document.getElementById('openDashboard'); if(d)d.addEventListener('click',renderDashboard);
 }}
-
 function renderTransition(section) {{
   setMusic(section.music);
   app.innerHTML = `
@@ -700,22 +961,25 @@ function renderEnd() {{
         </div>
       </div>
       ${{utilityBar()}}
-      <div class="controls home-controls"><div class="home-buttons"><button class="next-btn" id="goAdditional">地域の高齢化と職員負担</button><button class="next-btn secondary-home" id="goHome">タイトルへ戻る</button></div></div>`;
+      <div class="controls home-controls"><div class="home-tools"><button class="next-btn" id="goFirst">第1回案を入力</button><button class="next-btn secondary-home" id="goAdditional">地域の高齢化と職員負担</button><button class="next-btn secondary-home" id="goHome">タイトルへ戻る</button></div></div>`;
     bindUtilities();
+    document.getElementById('goFirst').addEventListener('click',()=>renderProposal('first'));
     document.getElementById('goAdditional').addEventListener('click', () => startExperience('additional'));
     document.getElementById('goHome').addEventListener('click', () => {{ currentTrack=null; audio.pause(); audio.currentTime=0; renderTitle(); }});
   }} else {{
+    markAdditionalCompleted();
     app.innerHTML = `
       <div class="stage" style="${{backgroundStyle('meeting')}}">
         <div class="end-card"><h2>信州みらい病院</h2><p>みなさんの検討で病院を一緒に変革していきましょう。</p></div>
       </div>
       ${{utilityBar()}}
-      ${{controls('タイトルへ戻る')}}`;
+      <div class="controls home-controls"><div class="home-tools"><button class="next-btn" id="goFinal">最終案を入力</button><button class="next-btn secondary-home" id="goDashboard">結果比較</button><button class="next-btn secondary-home" id="goHome">タイトルへ戻る</button></div></div>`;
     bindUtilities();
-    bindNext(() => {{ currentTrack=null; audio.pause(); audio.currentTime=0; renderTitle(); }});
+    document.getElementById('goFinal').addEventListener('click',()=>renderProposal('final'));
+    document.getElementById('goDashboard').addEventListener('click',renderDashboard);
+    document.getElementById('goHome').addEventListener('click',()=>{{ currentTrack=null; audio.pause(); audio.currentTime=0; renderTitle(); }});
   }}
 }}
-
 function renderCurrent() {{
   const slide = slides[cursor];
   if (!slide || slide.kind === 'end') {{ renderEnd(); return; }}
