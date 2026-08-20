@@ -11,6 +11,8 @@ st.set_page_config(
 
 BASE = Path(__file__).resolve().parent
 CONFIG = json.loads((BASE / "scenario.json").read_text(encoding="utf-8"))
+SAVED_EDITS_PATH = BASE / "saved_edits.json"
+SAVED_EDITS = json.loads(SAVED_EDITS_PATH.read_text(encoding="utf-8")) if SAVED_EDITS_PATH.is_file() else None
 
 
 import base64
@@ -54,6 +56,7 @@ payload = {
     "backgrounds": backgrounds,
     "music": music,
     "sections": CONFIG["sections"],
+    "saved_edits": SAVED_EDITS,
 }
 
 payload_json = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
@@ -366,6 +369,26 @@ button {{ font: inherit; }}
   font-weight: 900;
   cursor: pointer;
 }}
+
+.settings-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }}
+.field-block {{ display: flex; flex-direction: column; gap: 6px; }}
+.field-block.full {{ grid-column: 1 / -1; }}
+.field-block label {{ font-size: .86rem; font-weight: 900; color: #3d6678; }}
+.field-block input, .field-block select, .field-block textarea {{
+  width: 100%; border: 1px solid #adc7d3; border-radius: 10px; padding: 10px 11px;
+  background: #fff; color: #15394d; font: 700 .95rem/1.5 "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif;
+}}
+.field-block textarea {{ min-height: 130px; resize: vertical; }}
+.range-row {{ display: grid; grid-template-columns: 1fr 72px; gap: 10px; align-items: center; }}
+.range-row input[type="range"] {{ padding: 0; }}
+.helper {{ margin: 8px 0 0; color: #597886; font-size: .82rem; line-height: 1.55; }}
+.editor-actions.wrap {{ justify-content: space-between; flex-wrap: wrap; }}
+.left-actions, .right-actions {{ display: flex; gap: 9px; flex-wrap: wrap; }}
+.danger-btn {{ border: 1px solid #d3a6a6; border-radius: 11px; padding: 10px 16px; background: #fff5f5; color: #8b2e2e; font-weight: 900; cursor: pointer; }}
+.file-btn {{ position: relative; overflow: hidden; }}
+.file-btn input {{ position: absolute; inset: 0; opacity: 0; cursor: pointer; }}
+@media (max-width: 680px) {{ .settings-grid {{ grid-template-columns: 1fr; }} .field-block.full {{ grid-column: auto; }} }}
+
 @media (max-width: 680px) {{ .scene-grid {{ grid-template-columns: 1fr; }} }}
 @media (max-height: 820px) {{
   .stage {{ inset: 7px 10px 72px; }}
@@ -412,6 +435,42 @@ slides.push({{ kind: 'end' }});
 let cursor = -1;
 let started = false;
 let currentTrack = null;
+const STORAGE_KEY = 'shinshu_mirai_investment_editor_v5';
+const DEFAULT_STYLE = {{ speechPx: 19, namePx: 16, transitionPx: 42, titleHeadlinePx: 64, titleSubtitlePx: 32, titleLeadPx: 18 }};
+let styleSettings = {{ ...DEFAULT_STYLE }};
+
+function editableSnapshot() {{
+  return {{
+    version: 1,
+    title: DATA.title,
+    characterNames: Object.fromEntries(Object.entries(DATA.characters).map(([k,v]) => [k, v.name])),
+    sections: DATA.sections.map(s => ({{
+      id: s.id, transition: s.transition || '', background: s.background, music: s.music,
+      characters: [...(s.characters || [])],
+      segments: s.segments.map(x => ({{ speaker: x.speaker, text: x.text }}))
+    }})),
+    style: styleSettings
+  }};
+}}
+function applySnapshot(saved) {{
+  if (!saved || typeof saved !== 'object') return;
+  if (saved.title) Object.assign(DATA.title, saved.title);
+  if (saved.characterNames) Object.entries(saved.characterNames).forEach(([k,v]) => {{ if (DATA.characters[k] && typeof v === 'string') DATA.characters[k].name = v; }});
+  if (Array.isArray(saved.sections)) saved.sections.forEach(ss => {{
+    const sec = DATA.sections.find(x => x.id === ss.id); if (!sec) return;
+    if (typeof ss.transition === 'string') sec.transition = ss.transition;
+    if (ss.background && DATA.backgrounds[ss.background]) sec.background = ss.background;
+    if (ss.music && DATA.music[ss.music]) sec.music = ss.music;
+    if (Array.isArray(ss.characters)) sec.characters = ss.characters.filter(cid => DATA.characters[cid]);
+    if (Array.isArray(ss.segments)) ss.segments.forEach((seg,i) => {{ if (!sec.segments[i]) return; if (seg.speaker && DATA.characters[seg.speaker]) sec.segments[i].speaker = seg.speaker; if (typeof seg.text === 'string') sec.segments[i].text = seg.text; }});
+  }});
+  if (saved.style) styleSettings = {{ ...DEFAULT_STYLE, ...saved.style }};
+}}
+function loadSaved() {{ try {{ const raw=localStorage.getItem(STORAGE_KEY); if(raw) applySnapshot(JSON.parse(raw)); }} catch(e) {{ console.warn(e); }} }}
+function persist() {{ try {{ localStorage.setItem(STORAGE_KEY, JSON.stringify(editableSnapshot())); }} catch(e) {{ console.warn(e); }} }}
+function downloadEdits() {{ const blob=new Blob([JSON.stringify(editableSnapshot(),null,2)],{{type:'application/json'}}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='saved_edits.json'; a.click(); URL.revokeObjectURL(a.href); }}
+if (DATA.saved_edits) applySnapshot(DATA.saved_edits);
+loadSaved();
 
 function esc(s) {{
   return String(s ?? '')
@@ -451,10 +510,10 @@ function controls(label) {{
 }}
 
 
-function utilityBar(canEdit = false) {{
+function utilityBar() {{
   return `<div class="utility-bar">
     <button class="utility-btn" id="sceneMenu">場面</button>
-    ${{canEdit ? '<button class="utility-btn" id="editScenario">編集</button>' : ''}}
+    <button class="utility-btn" id="editScenario">編集</button>
   </div>`;
 }}
 
@@ -496,38 +555,49 @@ function openSceneMenu() {{
   }}));
 }}
 
-function openEditor() {{
-  if (cursor < 0 || !slides[cursor] || slides[cursor].kind !== 'dialogue') return;
+function currentContext() {{
+  if (cursor < 0) return {{ kind: 'title' }};
   const slide = slides[cursor];
-  const section = DATA.sections[slide.sectionIndex];
-  const segment = section.segments[slide.segmentIndex];
-  const speaker = DATA.characters[segment.speaker];
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-backdrop';
-  overlay.innerHTML = `<div class="modal">
-    <div class="modal-head"><h3>シナリオ編集</h3><button class="close-btn" id="closeModal">閉じる</button></div>
-    <div class="modal-body">
-      <p class="edit-meta">${{esc(speaker.name)}}</p>
-      <textarea class="editor-text" id="scenarioText">${{esc(segment.text)}}</textarea>
-      <div class="editor-actions">
-        <button class="secondary-btn" id="cancelEdit">キャンセル</button>
-        <button class="save-btn" id="saveEdit">反映</button>
-      </div>
-    </div>
-  </div>`;
-  app.appendChild(overlay);
-  const close = () => overlay.remove();
-  overlay.querySelector('#closeModal').addEventListener('click', close);
-  overlay.querySelector('#cancelEdit').addEventListener('click', close);
-  overlay.addEventListener('click', e => {{ if (e.target === overlay) close(); }});
-  overlay.querySelector('#saveEdit').addEventListener('click', () => {{
-    segment.text = overlay.querySelector('#scenarioText').value.trim();
-    close();
-    renderCurrent();
-  }});
-  setTimeout(() => {{ const t = overlay.querySelector('#scenarioText'); t.focus(); t.setSelectionRange(t.value.length, t.value.length); }}, 0);
+  if (!slide || slide.kind === 'end') return {{ kind: 'end' }};
+  return {{ kind: slide.kind, slide, section: DATA.sections[slide.sectionIndex] }};
 }}
-
+function optionHtml(obj, selected) {{ return Object.entries(obj).map(([k,v]) => `<option value="${{esc(k)}}" ${{k===selected?'selected':''}}>${{esc(v)}}</option>`).join(''); }}
+function syncPair(overlay,a,b){{ const x=overlay.querySelector('#'+a), y=overlay.querySelector('#'+b); if(x&&y){{x.addEventListener('input',()=>y.value=x.value);y.addEventListener('input',()=>x.value=y.value);}} }}
+function openEditor() {{
+  const ctx=currentContext(); const overlay=document.createElement('div'); overlay.className='modal-backdrop'; let body='';
+  const bgLabels={{meeting:'面談室',radiology:'放射線科',entrance:'エントランス'}};
+  const musicLabels={{intro:'intro',field:'field',negotiation:'negotiation',reflection:'reflection',resolution:'resolution'}};
+  if(ctx.kind==='dialogue'){{
+    const seg=ctx.section.segments[ctx.slide.segmentIndex];
+    body=`<div class="settings-grid">
+      <div class="field-block full"><label>シナリオ本文</label><textarea id="edText">${{esc(seg.text)}}</textarea></div>
+      <div class="field-block"><label>話者</label><select id="edSpeaker">${{optionHtml(Object.fromEntries(Object.entries(DATA.characters).map(([k,v])=>[k,v.name])),seg.speaker)}}</select></div>
+      <div class="field-block"><label>話者表示名</label><input id="edSpeakerName" value="${{esc(DATA.characters[seg.speaker].name)}}"></div>
+      <div class="field-block"><label>本文文字サイズ</label><div class="range-row"><input id="edSpeechPx" type="range" min="14" max="34" value="${{styleSettings.speechPx}}"><input id="edSpeechPxN" type="number" min="14" max="34" value="${{styleSettings.speechPx}}"></div></div>
+      <div class="field-block"><label>話者名文字サイズ</label><div class="range-row"><input id="edNamePx" type="range" min="12" max="28" value="${{styleSettings.namePx}}"><input id="edNamePxN" type="number" min="12" max="28" value="${{styleSettings.namePx}}"></div></div>
+      <div class="field-block"><label>背景</label><select id="edBackground">${{optionHtml(bgLabels,ctx.section.background)}}</select></div>
+      <div class="field-block"><label>BGM</label><select id="edMusic">${{optionHtml(musicLabels,ctx.section.music)}}</select></div>
+    </div>`;
+  }} else if(ctx.kind==='transition'){{
+    body=`<div class="settings-grid"><div class="field-block full"><label>場面タイトル</label><input id="edTransition" value="${{esc(ctx.section.transition||'')}}"></div><div class="field-block"><label>場面タイトル文字サイズ</label><div class="range-row"><input id="edTransitionPx" type="range" min="24" max="64" value="${{styleSettings.transitionPx}}"><input id="edTransitionPxN" type="number" min="24" max="64" value="${{styleSettings.transitionPx}}"></div></div><div class="field-block"><label>BGM</label><select id="edMusic">${{optionHtml(musicLabels,ctx.section.music)}}</select></div></div>`;
+  }} else if(ctx.kind==='title'){{
+    body=`<div class="settings-grid"><div class="field-block full"><label>タイトル</label><input id="edHeadline" value="${{esc(DATA.title.headline)}}"></div><div class="field-block full"><label>サブタイトル</label><input id="edSubtitle" value="${{esc(DATA.title.subtitle)}}"></div><div class="field-block full"><label>リード文</label><input id="edLead" value="${{esc(DATA.title.lead)}}"></div><div class="field-block"><label>タイトル文字サイズ</label><div class="range-row"><input id="edHeadlinePx" type="range" min="34" max="90" value="${{styleSettings.titleHeadlinePx}}"><input id="edHeadlinePxN" type="number" min="34" max="90" value="${{styleSettings.titleHeadlinePx}}"></div></div><div class="field-block"><label>サブタイトル文字サイズ</label><div class="range-row"><input id="edSubtitlePx" type="range" min="20" max="54" value="${{styleSettings.titleSubtitlePx}}"><input id="edSubtitlePxN" type="number" min="20" max="54" value="${{styleSettings.titleSubtitlePx}}"></div></div><div class="field-block"><label>リード文字サイズ</label><div class="range-row"><input id="edLeadPx" type="range" min="14" max="30" value="${{styleSettings.titleLeadPx}}"><input id="edLeadPxN" type="number" min="14" max="30" value="${{styleSettings.titleLeadPx}}"></div></div></div>`;
+  }} else {{ body='<p>この画面には直接編集する項目はありません。</p>'; }}
+  overlay.innerHTML=`<div class="modal"><div class="modal-head"><h3>編集</h3><button class="close-btn" id="closeModal">閉じる</button></div><div class="modal-body">${{body}}<p class="helper">編集内容はこのブラウザに自動保存されます。Ctrl + F5 や再起動後も保持されます。別のPCやGitHubへ移す場合は「設定を書き出す」を使用してください。</p><div class="editor-actions wrap"><div class="left-actions"><button class="secondary-btn" id="exportEdit">設定を書き出す</button><label class="secondary-btn file-btn">設定を読み込む<input id="importEdit" type="file" accept="application/json"></label><button class="danger-btn" id="resetEdit">編集をリセット</button></div><div class="right-actions"><button class="secondary-btn" id="cancelEdit">キャンセル</button><button class="save-btn" id="saveEdit">反映して保存</button></div></div></div></div>`;
+  app.appendChild(overlay); const close=()=>overlay.remove();
+  overlay.querySelector('#closeModal').addEventListener('click',close); overlay.querySelector('#cancelEdit').addEventListener('click',close); overlay.addEventListener('click',e=>{{if(e.target===overlay)close();}});
+  overlay.querySelector('#exportEdit').addEventListener('click',downloadEdits);
+  overlay.querySelector('#importEdit').addEventListener('change',e=>{{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{{try{{applySnapshot(JSON.parse(r.result));persist();close();renderCurrent();}}catch(err){{alert('設定ファイルを読み込めませんでした。');}}}};r.readAsText(f,'utf-8');}});
+  overlay.querySelector('#resetEdit').addEventListener('click',()=>{{if(confirm('このブラウザに保存した編集内容をすべてリセットしますか？')){{localStorage.removeItem(STORAGE_KEY);location.reload();}}}});
+  [['edSpeechPx','edSpeechPxN'],['edNamePx','edNamePxN'],['edTransitionPx','edTransitionPxN'],['edHeadlinePx','edHeadlinePxN'],['edSubtitlePx','edSubtitlePxN'],['edLeadPx','edLeadPxN']].forEach(([a,b])=>syncPair(overlay,a,b));
+  const spSel=overlay.querySelector('#edSpeaker'),spName=overlay.querySelector('#edSpeakerName');if(spSel&&spName)spSel.addEventListener('change',()=>spName.value=DATA.characters[spSel.value].name);
+  overlay.querySelector('#saveEdit').addEventListener('click',()=>{{
+    if(ctx.kind==='dialogue'){{const seg=ctx.section.segments[ctx.slide.segmentIndex];seg.text=overlay.querySelector('#edText').value.trim();seg.speaker=overlay.querySelector('#edSpeaker').value;DATA.characters[seg.speaker].name=overlay.querySelector('#edSpeakerName').value.trim()||DATA.characters[seg.speaker].name;ctx.section.background=overlay.querySelector('#edBackground').value;ctx.section.music=overlay.querySelector('#edMusic').value;styleSettings.speechPx=Number(overlay.querySelector('#edSpeechPxN').value)||DEFAULT_STYLE.speechPx;styleSettings.namePx=Number(overlay.querySelector('#edNamePxN').value)||DEFAULT_STYLE.namePx;if(!ctx.section.characters.includes(seg.speaker))ctx.section.characters.push(seg.speaker);}}
+    else if(ctx.kind==='transition'){{ctx.section.transition=overlay.querySelector('#edTransition').value.trim();ctx.section.music=overlay.querySelector('#edMusic').value;styleSettings.transitionPx=Number(overlay.querySelector('#edTransitionPxN').value)||DEFAULT_STYLE.transitionPx;}}
+    else if(ctx.kind==='title'){{DATA.title.headline=overlay.querySelector('#edHeadline').value.trim();DATA.title.subtitle=overlay.querySelector('#edSubtitle').value.trim();DATA.title.lead=overlay.querySelector('#edLead').value.trim();styleSettings.titleHeadlinePx=Number(overlay.querySelector('#edHeadlinePxN').value)||DEFAULT_STYLE.titleHeadlinePx;styleSettings.titleSubtitlePx=Number(overlay.querySelector('#edSubtitlePxN').value)||DEFAULT_STYLE.titleSubtitlePx;styleSettings.titleLeadPx=Number(overlay.querySelector('#edLeadPxN').value)||DEFAULT_STYLE.titleLeadPx;}}
+    persist();close();renderCurrent();
+  }});
+}}
 function bindNext(fn) {{
   const btn = document.getElementById('next');
   if (btn) btn.addEventListener('click', fn, {{ once: true }});
@@ -541,9 +611,9 @@ function renderTitle() {{
     <div class="stage" style="${{backgroundStyle('entrance')}}">
       <div class="cast count-1"><div class="char-wrap active"><img src="${{explainer.src}}" alt=""></div></div>
       <div class="title-card">
-        <h1>${{esc(DATA.title.headline)}}</h1>
-        <h2>${{esc(DATA.title.subtitle)}}</h2>
-        <p>${{esc(DATA.title.lead)}}</p>
+        <h1 style="font-size:${{styleSettings.titleHeadlinePx}}px">${{esc(DATA.title.headline)}}</h1>
+        <h2 style="font-size:${{styleSettings.titleSubtitlePx}}px">${{esc(DATA.title.subtitle)}}</h2>
+        <p style="font-size:${{styleSettings.titleLeadPx}}px">${{esc(DATA.title.lead)}}</p>
       </div>
     </div>
     ${{utilityBar()}}
@@ -561,7 +631,7 @@ function renderTransition(section) {{
   setMusic(section.music);
   app.innerHTML = `
     <div class="stage transition-stage">
-      <div class="transition-card"><h2>${{esc(section.transition)}}</h2></div>
+      <div class="transition-card"><h2 style="font-size:${{styleSettings.transitionPx}}px">${{esc(section.transition)}}</h2></div>
     </div>
     ${{utilityBar()}}
     ${{controls('場面を見る')}}`;
@@ -577,12 +647,12 @@ function renderDialogue(section, segment) {{
       ${{castHtml(section, segment.speaker)}}
       <div class="dialogue-wrap">
         <div class="dialogue-card">
-          <div class="nameplate">${{esc(c.name)}}</div>
-          <div class="speech">${{esc(segment.text)}}</div>
+          <div class="nameplate" style="font-size:${{styleSettings.namePx}}px">${{esc(c.name)}}</div>
+          <div class="speech" style="font-size:${{styleSettings.speechPx}}px">${{esc(segment.text)}}</div>
         </div>
       </div>
     </div>
-    ${{utilityBar(true)}}
+    ${{utilityBar()}}
     ${{controls('次へ')}}`;
   bindUtilities();
   bindNext(nextSlide);
