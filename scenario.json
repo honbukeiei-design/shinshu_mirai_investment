@@ -383,5 +383,104 @@
         }
       ]
     }
+  ],
+  "additional_sections": [
+    {
+      "id": "additional_context",
+      "transition": "地域の高齢化と職員負担",
+      "background": "meeting",
+      "music": "reflection",
+      "characters": [
+        "chief",
+        "director",
+        "medical"
+      ],
+      "segments": [
+        {
+          "speaker": "chief",
+          "text": "みなさん、ここで、もう一つ知っておいていただきたいことがあります。"
+        },
+        {
+          "speaker": "chief",
+          "text": "今後、この地域では、75歳以上の住民が増える見込みです。"
+        },
+        {
+          "speaker": "chief",
+          "text": "高齢になると、複数の病気を抱えながら通院される方や、救急搬送が必要になる方も増えていく可能性があります。"
+        },
+        {
+          "speaker": "chief",
+          "text": "これから先、病院には、これまで以上に高齢者医療を支える役割が求められるかもしれません。"
+        },
+        {
+          "speaker": "director",
+          "text": "そうですね。"
+        },
+        {
+          "speaker": "director",
+          "text": "ただ、その一方で、病院の中にも気になる変化があります。"
+        },
+        {
+          "speaker": "director",
+          "text": "病院職員の残業時間も増えています。"
+        },
+        {
+          "speaker": "medical",
+          "text": "患者さんへの対応や記録、事務作業など、一つひとつの業務が積み重なり、現場の負担は少しずつ大きくなっています。"
+        },
+        {
+          "speaker": "medical",
+          "text": "いろんな法令対応だったり、患者さんの個人情報やセンシティブな情報を守るうえでの対策なども現場では増えているんですよ。"
+        },
+        {
+          "speaker": "chief",
+          "text": "そうですね。"
+        },
+        {
+          "speaker": "chief",
+          "text": "地域では、医療を必要とする人がこれから増えていくかもしれない。"
+        },
+        {
+          "speaker": "chief",
+          "text": "けれど、病院で働く職員には、すでに負担がかかっているということです。"
+        },
+        {
+          "speaker": "director",
+          "text": "はい。"
+        },
+        {
+          "speaker": "director",
+          "text": "地域の医療ニーズに応えることは、私たちの大切な役割です。"
+        },
+        {
+          "speaker": "director",
+          "text": "しかし、今いる職員の頑張りだけに頼り続けるわけにもいきません。"
+        },
+        {
+          "speaker": "director",
+          "text": "これから患者さんが増えることを見据えて、どのように医療を支えるのか。"
+        },
+        {
+          "speaker": "director",
+          "text": "そして、職員が無理なく働き続けられる環境をどうつくるのか。"
+        },
+        {
+          "speaker": "director",
+          "text": "この二つを一緒に考えていく必要があります。"
+        },
+        {
+          "speaker": "chief",
+          "text": "今回の投資を考えるときには、目の前の課題だけではなく、こうした地域や病院の変化も判断材料にしていただきたいと思います。"
+        },
+        {
+          "speaker": "director",
+          "text": "この情報も踏まえて、改めて、信州みらい病院では何を優先すべきか考えてみてください。"
+        },
+        {
+          "speaker": "director",
+          "text": "みなさんの検討で病院を一緒に変革していきましょう。"
+        }
+      ]
+    }
   ]
 }

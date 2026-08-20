@@ -56,6 +56,7 @@ payload = {
     "backgrounds": backgrounds,
     "music": music,
     "sections": CONFIG["sections"],
+    "additional_sections": CONFIG.get("additional_sections", []),
     "saved_edits": SAVED_EDITS,
 }
 
@@ -224,6 +225,10 @@ button {{ font: inherit; }}
   box-shadow: 0 8px 20px rgba(0,0,0,.15);
 }}
 .next-btn:hover {{ transform: translateY(-1px); }}
+.home-controls {{ justify-content: center; }}
+.home-buttons {{ display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; width: min(760px, 90vw); }}
+.home-buttons .next-btn {{ width: min(350px, 42vw); }}
+.secondary-home {{ background: rgba(229,239,245,.96); }}
 .title-card, .transition-card, .end-card {{
   position: absolute;
   left: 50%;
@@ -422,20 +427,23 @@ const audio = document.getElementById('bgm');
 audio.volume = 0.16;
 
 let slides = [];
-DATA.sections.forEach((section, index) => {{
-  if (section.transition) {{
-    slides.push({{ kind: 'transition', sectionIndex: index }});
-  }}
-  section.segments.forEach((segment, segmentIndex) => {{
-    slides.push({{ kind: 'dialogue', sectionIndex: index, segmentIndex }});
+let currentMode = 'main';
+function currentSections() {{ return currentMode === 'additional' ? (DATA.additional_sections || []) : DATA.sections; }}
+function buildSlides() {{
+  slides = [];
+  currentSections().forEach((section, index) => {{
+    if (section.transition) slides.push({{ kind: 'transition', sectionIndex: index }});
+    section.segments.forEach((segment, segmentIndex) => slides.push({{ kind: 'dialogue', sectionIndex: index, segmentIndex }}));
   }});
-}});
-slides.push({{ kind: 'end' }});
+  slides.push({{ kind: 'end' }});
+}}
+buildSlides();
 
 let cursor = -1;
 let started = false;
 let currentTrack = null;
-const STORAGE_KEY = 'shinshu_mirai_investment_editor_v5';
+const STORAGE_KEY = 'shinshu_mirai_investment_editor_v6';
+const COMPLETED_KEY = 'shinshu_mirai_investment_main_completed_v1';
 const DEFAULT_STYLE = {{ speechPx: 19, namePx: 16, transitionPx: 42, titleHeadlinePx: 64, titleSubtitlePx: 32, titleLeadPx: 18 }};
 let styleSettings = {{ ...DEFAULT_STYLE }};
 
@@ -449,6 +457,11 @@ function editableSnapshot() {{
       characters: [...(s.characters || [])],
       segments: s.segments.map(x => ({{ speaker: x.speaker, text: x.text }}))
     }})),
+    additionalSections: (DATA.additional_sections || []).map(s => ({{
+      id: s.id, transition: s.transition || '', background: s.background, music: s.music,
+      characters: [...(s.characters || [])],
+      segments: s.segments.map(x => ({{ speaker: x.speaker, text: x.text }}))
+    }})),
     style: styleSettings
   }};
 }}
@@ -456,14 +469,19 @@ function applySnapshot(saved) {{
   if (!saved || typeof saved !== 'object') return;
   if (saved.title) Object.assign(DATA.title, saved.title);
   if (saved.characterNames) Object.entries(saved.characterNames).forEach(([k,v]) => {{ if (DATA.characters[k] && typeof v === 'string') DATA.characters[k].name = v; }});
-  if (Array.isArray(saved.sections)) saved.sections.forEach(ss => {{
-    const sec = DATA.sections.find(x => x.id === ss.id); if (!sec) return;
-    if (typeof ss.transition === 'string') sec.transition = ss.transition;
-    if (ss.background && DATA.backgrounds[ss.background]) sec.background = ss.background;
-    if (ss.music && DATA.music[ss.music]) sec.music = ss.music;
-    if (Array.isArray(ss.characters)) sec.characters = ss.characters.filter(cid => DATA.characters[cid]);
-    if (Array.isArray(ss.segments)) ss.segments.forEach((seg,i) => {{ if (!sec.segments[i]) return; if (seg.speaker && DATA.characters[seg.speaker]) sec.segments[i].speaker = seg.speaker; if (typeof seg.text === 'string') sec.segments[i].text = seg.text; }});
-  }});
+  const applySections = (savedSections, targetSections) => {{
+    if (!Array.isArray(savedSections)) return;
+    savedSections.forEach(ss => {{
+      const sec = targetSections.find(x => x.id === ss.id); if (!sec) return;
+      if (typeof ss.transition === 'string') sec.transition = ss.transition;
+      if (ss.background && DATA.backgrounds[ss.background]) sec.background = ss.background;
+      if (ss.music && DATA.music[ss.music]) sec.music = ss.music;
+      if (Array.isArray(ss.characters)) sec.characters = ss.characters.filter(cid => DATA.characters[cid]);
+      if (Array.isArray(ss.segments)) ss.segments.forEach((seg,i) => {{ if (!sec.segments[i]) return; if (seg.speaker && DATA.characters[seg.speaker]) sec.segments[i].speaker = seg.speaker; if (typeof seg.text === 'string') sec.segments[i].text = seg.text; }});
+    }});
+  }};
+  applySections(saved.sections, DATA.sections);
+  applySections(saved.additionalSections, DATA.additional_sections || []);
   if (saved.style) styleSettings = {{ ...DEFAULT_STYLE, ...saved.style }};
 }}
 function loadSaved() {{ try {{ const raw=localStorage.getItem(STORAGE_KEY); if(raw) applySnapshot(JSON.parse(raw)); }} catch(e) {{ console.warn(e); }} }}
@@ -527,6 +545,16 @@ function bindUtilities() {{
 function slideIndexForSection(sectionIndex) {{
   return slides.findIndex(s => s.sectionIndex === sectionIndex);
 }}
+function mainCompleted() {{ try {{ return localStorage.getItem(COMPLETED_KEY) === '1'; }} catch(e) {{ return false; }} }}
+function markMainCompleted() {{ try {{ localStorage.setItem(COMPLETED_KEY, '1'); }} catch(e) {{}} }}
+function startExperience(mode) {{
+  currentMode = mode;
+  buildSlides();
+  cursor = 0;
+  started = true;
+  audio.play().catch(() => {{}});
+  renderCurrent();
+}}
 
 function sectionLabel(section, index) {{
   if (section.transition) return section.transition;
@@ -536,7 +564,7 @@ function sectionLabel(section, index) {{
 }}
 
 function openSceneMenu() {{
-  const items = DATA.sections.map((section, index) =>
+  const items = currentSections().map((section, index) =>
     `<button class="scene-btn" data-section="${{index}}">${{esc(sectionLabel(section, index))}}</button>`
   ).join('');
   const overlay = document.createElement('div');
@@ -559,7 +587,7 @@ function currentContext() {{
   if (cursor < 0) return {{ kind: 'title' }};
   const slide = slides[cursor];
   if (!slide || slide.kind === 'end') return {{ kind: 'end' }};
-  return {{ kind: slide.kind, slide, section: DATA.sections[slide.sectionIndex] }};
+  return {{ kind: slide.kind, slide, section: currentSections()[slide.sectionIndex] }};
 }}
 function optionHtml(obj, selected) {{ return Object.entries(obj).map(([k,v]) => `<option value="${{esc(k)}}" ${{k===selected?'selected':''}}>${{esc(v)}}</option>`).join(''); }}
 function syncPair(overlay,a,b){{ const x=overlay.querySelector('#'+a), y=overlay.querySelector('#'+b); if(x&&y){{x.addEventListener('input',()=>y.value=x.value);y.addEventListener('input',()=>x.value=y.value);}} }}
@@ -604,9 +632,14 @@ function bindNext(fn) {{
 }}
 
 function renderTitle() {{
+  currentMode = 'main';
+  buildSlides();
+  cursor = -1;
   const first = DATA.sections[0];
   setMusic(first.music);
   const explainer = DATA.characters.explainer;
+  const extraButton = mainCompleted() && (DATA.additional_sections || []).length
+    ? `<button class="next-btn secondary-home" id="startAdditional">地域の高齢化と職員負担</button>` : '';
   app.innerHTML = `
     <div class="stage" style="${{backgroundStyle('entrance')}}">
       <div class="cast count-1"><div class="char-wrap active"><img src="${{explainer.src}}" alt=""></div></div>
@@ -617,14 +650,11 @@ function renderTitle() {{
       </div>
     </div>
     ${{utilityBar()}}
-    ${{controls('はじめる')}}`;
+    <div class="controls home-controls"><div class="home-buttons"><button class="next-btn" id="startMain">はじめる</button>${{extraButton}}</div></div>`;
   bindUtilities();
-  bindNext(() => {{
-    started = true;
-    audio.play().catch(() => {{}});
-    cursor = 0;
-    renderCurrent();
-  }});
+  document.getElementById('startMain').addEventListener('click', () => startExperience('main'));
+  const extra = document.getElementById('startAdditional');
+  if (extra) extra.addEventListener('click', () => startExperience('additional'));
 }}
 
 function renderTransition(section) {{
@@ -660,29 +690,36 @@ function renderDialogue(section, segment) {{
 
 function renderEnd() {{
   setMusic('resolution');
-  app.innerHTML = `
-    <div class="stage" style="${{backgroundStyle('meeting')}}">
-      <div class="end-card">
-        <h2>あなたなら何を優先しますか？</h2>
-        <p>5つの投資案から、信州みらい病院にとって優先すべき投資を考えてみましょう。</p>
+  if (currentMode === 'main') {{
+    markMainCompleted();
+    app.innerHTML = `
+      <div class="stage" style="${{backgroundStyle('meeting')}}">
+        <div class="end-card">
+          <h2>あなたなら何を優先しますか？</h2>
+          <p>5つの投資案から、信州みらい病院にとって優先すべき投資を考えてみましょう。</p>
+        </div>
       </div>
-    </div>
-    ${{utilityBar()}}
-    ${{controls('タイトルへ戻る')}}`;
-  bindUtilities();
-  bindNext(() => {{
-    cursor = -1;
-    currentTrack = null;
-    audio.pause();
-    audio.currentTime = 0;
-    renderTitle();
-  }});
+      ${{utilityBar()}}
+      <div class="controls home-controls"><div class="home-buttons"><button class="next-btn" id="goAdditional">地域の高齢化と職員負担</button><button class="next-btn secondary-home" id="goHome">タイトルへ戻る</button></div></div>`;
+    bindUtilities();
+    document.getElementById('goAdditional').addEventListener('click', () => startExperience('additional'));
+    document.getElementById('goHome').addEventListener('click', () => {{ currentTrack=null; audio.pause(); audio.currentTime=0; renderTitle(); }});
+  }} else {{
+    app.innerHTML = `
+      <div class="stage" style="${{backgroundStyle('meeting')}}">
+        <div class="end-card"><h2>信州みらい病院</h2><p>みなさんの検討で病院を一緒に変革していきましょう。</p></div>
+      </div>
+      ${{utilityBar()}}
+      ${{controls('タイトルへ戻る')}}`;
+    bindUtilities();
+    bindNext(() => {{ currentTrack=null; audio.pause(); audio.currentTime=0; renderTitle(); }});
+  }}
 }}
 
 function renderCurrent() {{
   const slide = slides[cursor];
   if (!slide || slide.kind === 'end') {{ renderEnd(); return; }}
-  const section = DATA.sections[slide.sectionIndex];
+  const section = currentSections()[slide.sectionIndex];
   if (slide.kind === 'transition') renderTransition(section);
   else renderDialogue(section, section.segments[slide.segmentIndex]);
 }}
