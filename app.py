@@ -341,6 +341,7 @@ button {{ font: inherit; }}
 }}
 .modal-body {{ padding: 16px 18px 18px; max-height: calc(82vh - 62px); overflow: auto; }}
 .scene-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }}
+.scene-home-btn {{ width: 100%; margin-bottom: 12px; background: #eef5f8; border: 1px solid #aac1cf; font-weight: 700; }}
 .scene-btn {{
   width: 100%;
   min-height: 54px;
@@ -690,15 +691,25 @@ function openSceneMenu() {{
   overlay.className = 'modal-backdrop';
   overlay.innerHTML = `<div class="modal">
     <div class="modal-head"><h3>場面を選ぶ</h3><button class="close-btn" id="closeModal">閉じる</button></div>
-    <div class="modal-body"><div class="scene-grid">${{items}}</div></div>
+    <div class="modal-body">
+      <button class="scene-btn scene-home-btn" id="sceneHome">タイトルに戻る</button>
+      <div class="scene-grid">${{items}}</div>
+    </div>
   </div>`;
   app.appendChild(overlay);
   overlay.querySelector('#closeModal').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => {{ if (e.target === overlay) overlay.remove(); }});
-  overlay.querySelectorAll('.scene-btn').forEach(btn => btn.addEventListener('click', () => {{
+  overlay.querySelector('#sceneHome').addEventListener('click', () => {{
+    overlay.remove();
+    currentTrack = null;
+    audio.pause();
+    audio.currentTime = 0;
+    renderTitle();
+  }});
+  overlay.querySelectorAll('.scene-btn[data-section]').forEach(btn => btn.addEventListener('click', () => {{
     const sectionIndex = Number(btn.dataset.section);
     const idx = slideIndexForSection(sectionIndex);
-    if (idx >= 0) {{ cursor = idx; started = true; renderCurrent(); }}
+    if (idx >= 0) {{ overlay.remove(); cursor = idx; started = true; renderCurrent(); }}
   }}));
 }}
 
